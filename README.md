@@ -2,6 +2,7 @@
 
 [![Paper](https://img.shields.io/badge/Paper-arXiv:2510.05396-b31b1b.svg)](https://arxiv.org/abs/2510.05396)
 [![Model](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Model-yellow)](https://huggingface.co/quicktensor/blockrank-msmarco-mistral-7b)
+[![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nilesh2797/BlockRank/blob/main/quickstart.ipynb)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
@@ -37,7 +38,7 @@ pip install -e .
 
 ### Interactive Demo
 
-Try the Colab notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nilesh2797/BlockRank/blob/main/examples/quickstart.ipynb)
+Try the Colab notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nilesh2797/BlockRank/blob/main/quickstart.ipynb)
 
 ### As a Library
 
