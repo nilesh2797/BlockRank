@@ -115,7 +115,7 @@ score_i = Σ attention[layer, head, query_token, doc_i_tokens]
 
 | Model | Base | Training Data | Download |
 |-------|------|---------------|----------|
-| **BlockRank-Mistral-7B** | Mistral-7B-Instruct-v0.3 | 10% MS MARCO (50K) | [🤗 HuggingFace](https://huggingface.co/quicktensor/blockrank-msmarco-mistral-7b) |
+| **blockrank-msmarco-mistral-7B** | Mistral-7B-Instruct-v0.3 | 10% MS MARCO (50K) | [🤗 HuggingFace](https://huggingface.co/quicktensor/blockrank-msmarco-mistral-7b) |
 | *More models coming soon...* | | | |
 
 ## Documentation
