@@ -224,14 +224,14 @@ accelerate launch --config_file src/configs/accelerate_config.yaml \
 
 ### Training Scripts
 
-Use the provided launcher script:
+You can also use the provided bash training script:
 
 ```bash
 # Single GPU
-./src/run_training.sh single my_config.yaml
+./run_training.sh single my_config.yaml
 
 # Multi GPU
-./src/run_training.sh multi my_config.yaml
+./run_training.sh multi my_config.yaml
 ```
 
 ## Monitoring
