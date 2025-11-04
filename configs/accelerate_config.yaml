@@ -1,0 +1,43 @@
+# Simple Accelerate configuration for multi-GPU training without DeepSpeed
+# Use this if you don't need DeepSpeed optimizations
+
+compute_environment: LOCAL_MACHINE
+
+distributed_type: MULTI_GPU
+
+# Number of GPUs to use
+num_processes: 4
+
+# Mixed precision training
+mixed_precision: bf16
+
+# GPU IDs (use 'all' to use all available GPUs)
+gpu_ids: all
+
+# DDP backend
+downcast_bf16: no
+
+# Main process settings
+main_process_port: 29500
+main_training_function: main
+
+# Whether to use CPU
+use_cpu: false
+
+# Number of machines
+num_machines: 1
+
+# Machine rank
+machine_rank: 0
+
+# Whether to use DeepSpeed
+deepspeed_config: {}
+
+# Whether to use FSDP
+fsdp_config: {}
+
+# Whether to use Megatron-LM
+megatron_lm_config: {}
+
+# DDP settings
+dynamo_backend: "NO"

@@ -1,69 +1,150 @@
 # BlockRank: Scalable In-context Ranking with Generative Models
 
-[![Paper](https://img.shields.io/badge/Paper-arXiv-b31b1b.svg)](https://arxiv.org/abs/2510.05396)
+[![Paper](https://img.shields.io/badge/Paper-arXiv:2510.05396-b31b1b.svg)](https://arxiv.org/abs/2510.05396)
+[![Model](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Model-yellow)](https://huggingface.co/quicktensor/blockrank-msmarco-mistral-7b)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Code-Coming%20Soon-orange.svg)](#code-coming-soon)
-
----
-
-### Overview
-
-Large Language Models (LLMs) are rapidly becoming the fundamental unit of computation — powering reasoning, generation, and increasingly, *retrieval*.  While modern Information Retrieval (IR) systems already leverage LLMs for contextual ranking, they often treat them as *black boxes*, relying on general intelligence but ignoring structural efficiency.
-
-This work introduces BlockRank, a method designed to make LLMs efficient and scalable for in-context ranking by aligning their internal attention and inference mechanisms with the structure of the in-context ranking task.
-
----
-
-### What is BlockRank?
-
-**BlockRank (Blockwise In-context Ranking)** is a specialized architecture and fine-tuning approach for scalable in-context retrieval and ranking. It’s built on two key insights about LLMs fine-tuned for ranking tasks:
-
-1. **Inter-document block sparsity**
-  → Attention is dense within each document but sparse across documents — meaning full quadratic attention is unnecessary.
-
-2. **Query-token retrieval signals**
-  → Certain query tokens (e.g., delimiters) encode strong relevance signals in their attention patterns during the prefill stage.
-
-### Method Summary
-
-Based on these observations, BlockRank modifies both the architecture and training of an LLM:
-
-- **Structured Sparse Attention**  
-  Enforces attention only within document blocks and to shared instruction tokens, cutting complexity from *quadratic → linear*.
-
-- **Auxiliary Contrastive Attention Loss**  
-  Adds a mid-layer contrastive objective to directly optimize query–document attention, improving both relevance and interpretability.
-
-- **Attention-based Inference**  
-  Uses attention maps (from the prefill stage) to compute document relevance scores directly — eliminating the need for auto-regressive decoding.
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
 <p align="center">
-  <img src="assets/blockrank_diagram.png" alt="BlockRank Architecture Overview" width="700"/>
-  <br/>
-  <em>Figure: BlockRank imposes blockwise sparse attention and leverages query-token attention signals for efficient in-context ranking.</em>
+  <img src="assets/blockrank_diagram.png" alt="BlockRank Architecture" width="650"/>
 </p>
 
----
+**BlockRank** makes LLMs efficient for document ranking by using structured sparse attention and attention-based inference, achieving **2-4× faster inference** with competitive accuracy on BEIR benchmarks.
 
-### Results Summary
+## Key Features
 
-- Strong zero-shot generalization on BEIR, matches or outperforms state-of-the-art listwise rankers (e.g., RankZephyr, FIRST)
-- 4.7× faster inference on MSMarco (100 documents) compared to standard decoding based implementation
-- Scales linearly with in-context documents
-- Works with existing open LLMs (e.g., Mistral, Llama)  
+- 🚀 **Linear Complexity**: O(n) attention instead of O(n²) through block-sparse patterns
+- ⚡ **Fast Inference**: Allows skipping autoregressive decoding using attention scores directly
+- 🎯 **Strong Performance**: Matches or outperforms state-of-the-art listwise rankers
+- 🔧 **Easy Integration**: Existing LLMs (Qwen, Llama, etc) can be easily made a BlockRank model
 
----
+## Installation
 
-## Code for Reproduction
+```bash
+pip install git+https://github.com/nilesh2797/BlockRank.git
+```
 
-Stay tuned — full training and inference code will be available here soon.
-- [ ] Kernelized Blockwise Attention Implementation
-- [ ] Fine-tuning scripts for Mistral-7B
-- [ ] Evaluation pipelines for BEIR, MSMarco, and NQ
+Or clone for development:
+
+```bash
+git clone https://github.com/nilesh2797/BlockRank.git
+cd BlockRank
+pip install -r requirements.txt
+pip install -e .
+```
+
+## Quick Start
+
+### Interactive Demo
+
+Try the Colab notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nilesh2797/BlockRank/blob/main/examples/quickstart.ipynb)
+
+### As a Library
+
+```python
+import blockrank
+
+# Import dataset utilities
+from blockrank.dataset import load_icr_dataset_hf, calculate_accuracy
+
+# Import attention modules
+from blockrank import blockrank_std_attention
+from blockrank import blockrank_triton_kernel_attention
+# standard SDPA-based and torch compiled BlockRank
+blockrank_std_attention.register_blockrank_attention(); 
+# Triton-kernel based BlockRank - only supports inference at the moment!
+blockrank_triton_kernel_attention.register_triton_blockrank_attention();
+
+# Import training components
+from blockrank.losses import compute_auxiliary_attention_loss
+from blockrank.trainer import BlockRankAuxLossTrainer
+```
+
+### Training
+
+```bash
+# Prepare your data (JSONL format - see docs/DATA_FORMAT.md)
+# Configure training (see src/configs/ for examples)
+
+# Single GPU
+python scripts/train.py --config your_config.yaml
+
+# Multi-GPU
+accelerate launch --config_file src/configs/accelerate_config.yaml \
+    scripts/train.py --config your_config.yaml
+```
+
+Details in [docs/TRAINING.md](docs/TRAINING.md).
+
+### Evaluation
+
+```bash
+# Fast attention-based inference (recommended)
+python scripts/eval_attn.py \
+    --config src/configs/eval_beir.yaml \
+    --checkpoint your-model \
+    --attn_layer 20
+
+# Standard decode-based inference
+python scripts/eval_decode.py \
+    --config src/configs/eval_beir.yaml \
+    --checkpoint your-model
+```
+
+## How It Works
+
+BlockRank introduces three changes to standard transformer LLMs:
+
+**1. Structured Sparse Attention**
+Documents attend only to instructions and themselves (causal), while the query attends to all. Reduces complexity from O(n²) → O(n).
+
+**2. Auxiliary Contrastive Loss**
+Mid-layer InfoNCE loss on attention patterns strengthens query-document relevance signals:
+```
+L = L_lm + λ * L_aux
+```
+
+**3. Attention-Based Inference**
+Extract relevance scores directly from attention maps during prefill stage:
+```python
+score_i = Σ attention[layer, head, query_token, doc_i_tokens]
+```
+
+## Model Zoo
+
+| Model | Base | Training Data | Download |
+|-------|------|---------------|----------|
+| **BlockRank-Mistral-7B** | Mistral-7B-Instruct-v0.3 | 10% MS MARCO (50K) | [🤗 HuggingFace](https://huggingface.co/quicktensor/blockrank-msmarco-mistral-7b) |
+| *More models coming soon...* | | | |
+
+## Documentation
+
+- **[Training Guide](docs/TRAINING.md)** - Detailed training instructions, hyperparameters, and best practices
+- **[Data Format](docs/DATA_FORMAT.md)** - Data preparation and format specifications
+- **[Paper](https://arxiv.org/abs/2510.05396)** - Full technical details and benchmarks
+
+## Project Structure
+
+```
+BlockRank/
+├── src/blockrank/          # Python package
+│   ├── blockrank_std_attention.py      # PyTorch attention implementations
+│   ├── blockrank_triton_kernel_attention.py  # Triton kernels (fastest, but inference-only)
+│   ├── dataset.py          # Data loading and collation
+│   ├── losses.py           # Auxiliary contrastive loss
+│   ├── trainer.py          # Custom trainer with aux loss
+│   └── utils.py            # Utilities (metrics, formatting)
+├── scripts/                # CLI scripts
+│   ├── train.py            # Training script
+│   ├── eval_attn.py        # Attention-based evaluation
+│   └── eval_decode.py      # Decode-based evaluation
+├── configs/                # Training & eval configs
+├── docs/                   # Documentation
+├── data/                   # Downloaded datasets
+└── quickstart.ipynb        # Quickstart notebook
+```
 
 ## Citation
-
-If you find this work useful, please cite:
 
 ```bibtex
 @article{gupta2025blockrank,
@@ -73,3 +154,19 @@ If you find this work useful, please cite:
   year={2025}
 }
 ```
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Contact
+
+- **Paper**: [arXiv:2510.05396](https://arxiv.org/abs/2510.05396)
+- **Issues**: [GitHub Issues](https://github.com/nilesh2797/BlockRank/issues)
+- **Author**: [Nilesh Gupta](https://nilesh2797.github.io/)
+
+---
+
+<p align="center">
+  <b>⭐ Star us on GitHub if BlockRank is useful for your research!</b>
+</p>

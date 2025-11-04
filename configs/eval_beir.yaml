@@ -1,0 +1,17 @@
+# Evaluation configuration for DL20 benchmark
+
+# Model checkpoint to evaluate
+model:
+  model_name_or_path: "quicktensor/blockrank-msmarco-mistral-7b"
+  attn_implementation: "triton_blockrank"  # Use BlockRank attention implementation
+
+# Evaluation configuration
+eval:
+  data_path: "data/icr-beir-evals/test/dbpedia_entity.jsonl"
+  qrels_path: "data/icr-beir-evals/qrels/dbpedia_entity.tsv"
+  num_documents: -1 # Evaluate on all documents
+  output_dir: "outputs/eval_beir_dbpedia_entity"
+  seed: 42
+  per_device_eval_batch_size: 1
+  train_test_split: 1.0
+  max_block_length: 512

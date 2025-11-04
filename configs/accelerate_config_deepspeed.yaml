@@ -1,0 +1,39 @@
+# Accelerate configuration for multi-GPU training
+# This config is for 4 GPUs with DeepSpeed ZeRO Stage 2
+
+compute_environment: LOCAL_MACHINE
+
+distributed_type: MULTI_GPU
+
+# Number of GPUs
+num_processes: 4
+
+# Mixed precision training (bf16)
+mixed_precision: bf16
+
+# GPU IDs to use (if you want to specify)
+gpu_ids: all
+
+# Whether to use CPU
+use_cpu: false
+
+# DeepSpeed configuration (optional, for memory optimization)
+deepspeed_config:
+  gradient_accumulation_steps: 4
+  gradient_clipping: 1.0
+  zero_stage: 2
+  offload_optimizer_device: none
+  offload_param_device: none
+  zero3_init_flag: false
+  zero3_save_16bit_model: false
+
+# Main process settings
+main_process_port: 29500
+main_training_function: main
+
+# Whether to use FSDP (alternative to DeepSpeed)
+# fsdp_config: {}
+
+# DDP settings (if not using DeepSpeed)
+# dynamo_backend: "NO"
+# rdzv_backend: static

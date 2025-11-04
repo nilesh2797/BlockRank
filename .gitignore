@@ -1,0 +1,58 @@
+# Data directories
+data/*/
+!data/README.md
+*.jsonl
+*.tsv
+*.json
+
+# Model outputs and checkpoints
+outputs/
+checkpoints/
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Python
+*__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Weights & Biases
+*wandb/
+wandb/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache/
+*.cache
+src/blockrank/notebooks/
