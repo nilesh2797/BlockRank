@@ -24,6 +24,7 @@ def load_icr_dataset_hf(
     streaming: bool = False,
     eval_mode: bool = False,
     use_blockrank: bool = False,
+    **kwargs,
 ) -> DatasetDict:
     """
     Returns a DatasetDict with 'train' and 'test' splits, each item containing:
@@ -32,14 +33,21 @@ def load_icr_dataset_hf(
       - answer_ids: list[int]
       - num_documents: int
     """
-    # handle sharded jsonl files
-    if "*" in data_path:
-        import glob
-        data_files = sorted(list(glob.glob(data_path)))
+    # handle sharded jsonl files, local paths, or HuggingFace hub datasets
+    if data_path.endswith('.jsonl') or '*' in data_path or os.path.exists(data_path):
+        # Local file handling
+        if "*" in data_path:
+            import glob
+            data_files = sorted(list(glob.glob(data_path)))
+        else:
+            data_files = data_path
+        cache_dir = os.path.join(os.path.dirname(data_path) if not "*" in data_path else os.path.dirname(data_path.split('*')[0]), "hf_cache")
+        raw = load_dataset("json", data_files=data_files, split="train", streaming=streaming, cache_dir=cache_dir)
     else:
-        data_files = data_path
-    cache_dir = os.path.join(os.path.dirname(data_path), "hf_cache")
-    raw = load_dataset("json", data_files=data_files, split="train", streaming=streaming, cache_dir=cache_dir)
+        # HuggingFace Hub dataset
+        split = kwargs.pop("split", "train")
+        subset = kwargs.pop("subset", None)
+        raw = load_dataset(data_path, subset, split=split, streaming=streaming)
 
     if streaming:
         raw = raw.shuffle(seed=seed or 42)
@@ -48,6 +56,8 @@ def load_icr_dataset_hf(
     else:
         if train_test_split >= 1.0:
             ds_dict = DatasetDict({"train": raw})
+        elif train_test_split <= 0.0:
+            ds_dict = DatasetDict({"test": raw})
         else:
             ds_dict = raw.train_test_split(test_size=1 - train_test_split, seed=seed or 42)
 
@@ -121,15 +131,15 @@ def load_icr_dataset_hf(
             'block_lengths': block_lengths,
         }
 
-    ds_dict = ds_dict.map(_sample_and_format, with_indices=True, remove_columns=['documents'], num_proc=os.cpu_count()-2)
+    ds_dict = ds_dict.map(_sample_and_format, with_indices=True, remove_columns=['documents'], num_proc=max(1, os.cpu_count()-2))
     os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
     ds_dict = ds_dict.map(
         _block_tokenize_batch if use_blockrank else _tokenize_batch,
         batched=True,
         batch_size=64,
-        # remove_columns=['prompt', 'completion'],
-        num_proc=os.cpu_count()-2
+        remove_columns=['prompt', 'completion'],
+        num_proc=max(1, os.cpu_count()-2),
     )
 
     ds_dict = ds_dict.with_format("torch")
@@ -178,7 +188,7 @@ def icr_collate_fn(batch, tok, pad_to_multiple_of=8, max_seq_length=None, always
         'labels': labels,
     }
 
-def block_icr_collate_fn(batch, tok, pad_to_multiple_of=16, max_block_length=None, always_max_len=False) -> Dict[str, torch.Tensor]:
+def block_icr_collate_fn(batch, tok, pad_to_multiple_of=16, max_block_length=None, always_max_len=False, permutation_invariant_pos=True) -> Dict[str, torch.Tensor]:
     pad_token_id = tok.pad_token_id
     padding_side = tok.padding_side
     B = len(batch)
@@ -239,11 +249,15 @@ def block_icr_collate_fn(batch, tok, pad_to_multiple_of=16, max_block_length=Non
         labels[:, -1, :]) # prompt tokens not to be predicted
 
     # permutation invariant position ids respecting block boundaries
-    position_ids = attention_mask.cumsum(-1)
-    position_ids[:, 1:-1] += position_ids[:, 0].max(dim=-1).values[:, None, None] # offset by previous block max
-    position_ids[:, -1] += 16384  # a large position offset for last block
-    position_ids = torch.clamp_min(position_ids-1, 0)
-    position_ids[~attention_mask] = 0 # pad positions
+    if permutation_invariant_pos:
+        position_ids = attention_mask.cumsum(-1)
+        position_ids[:, 1:-1] += position_ids[:, 0].max(dim=-1).values[:, None, None] # offset by previous block max
+        position_ids[:, -1] += 16384  # a large position offset for last block
+        position_ids = torch.clamp_min(position_ids-1, 0)
+        position_ids[~attention_mask] = 0 # pad positions
+    else:
+        position_ids = attention_mask.view(B, -1).cumsum(-1) * attention_mask.view(-1)
+        position_ids = torch.clamp_min(position_ids-1, 0)
 
     # Extract and pad answer_ids from batch items (for auxiliary loss)
     answer_ids_padded = torch.nn.utils.rnn.pad_sequence(
