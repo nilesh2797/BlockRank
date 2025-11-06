@@ -25,6 +25,29 @@ class BlockRankAuxLossTrainer(SFTTrainer):
         - aux_loss_weight: Weight for combining losses (float, lambda in paper)
         - aux_temperature: Temperature for InfoNCE loss (float, tau in paper)
     """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Initialize the trainer and enforce use_reentrant=False for gradient checkpointing
+        when auxiliary loss is enabled.
+        """
+        super().__init__(*args, **kwargs)
+
+        # Check if both gradient checkpointing and auxiliary loss are enabled
+        use_aux_loss = getattr(self.args, 'use_aux_loss', False)
+        gradient_checkpointing = getattr(self.args, 'gradient_checkpointing', False)
+
+        if use_aux_loss and gradient_checkpointing:
+            # Ensure gradient_checkpointing_kwargs exists
+            if self.args.gradient_checkpointing_kwargs is None:
+                self.args.gradient_checkpointing_kwargs = {}
+
+            # Enforce use_reentrant=False for proper gradient flow through attention scores
+            if self.args.gradient_checkpointing_kwargs.get('use_reentrant', True):
+                print("[BlockRankAuxLossTrainer] Setting gradient_checkpointing_kwargs['use_reentrant']=False")
+                print("  This is required for auxiliary loss to receive gradients with gradient checkpointing enabled.")
+                self.args.gradient_checkpointing_kwargs['use_reentrant'] = False
+
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """
         Override compute_loss to add auxiliary contrastive loss.

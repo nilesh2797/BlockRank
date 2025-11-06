@@ -83,4 +83,4 @@ def compute_auxiliary_attention_loss(
     loss = -(pos_logsumexp - all_logsumexp).mean()
     accuracy = pos_mask.gather(1, logits.argmax(dim=1, keepdim=True)).float().mean()
     
-    return loss, accuracy, logits if return_logits else loss, accuracy
+    return (loss, accuracy, logits) if return_logits else (loss, accuracy)

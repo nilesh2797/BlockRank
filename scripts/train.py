@@ -101,8 +101,8 @@ class TrainArgs(SFTConfig):
     remove_unused_columns: bool = False
     save_strategy: str = "no"
     logging_first_step: bool = True
-    # available in recent transformers; safe to default None
-    gradient_checkpointing_kwargs: Optional[dict] = None
+    # available in recent transformers; !important! set use_reentrant=False when gradient_checkpointing=True for blockrank aux loss
+    gradient_checkpointing_kwargs: Optional[dict] = field(default_factory=lambda: {"use_reentrant": False}) 
     # skip_prepare_dataset True by default
     dataset_kwargs: Dict[str, Any] = field(default_factory=lambda: {"skip_prepare_dataset": True})
     # Auxiliary loss parameters
@@ -126,6 +126,7 @@ def setup_model_and_tokenizer(m: ModelArgs, device_map: str = "auto"):
     if tok.pad_token is None:
         tok.pad_token = tok.unk_token
         tok.pad_token_id = tok.unk_token_id
+    tok.padding_side = "left"
 
     q_cfg = BitsAndBytesConfig(
         load_in_4bit=True,

@@ -638,10 +638,10 @@ def sdpa_blockrank_attention_forward(
 
     s_last = None
     if return_last_block_attn_scores:
-        # Compute attention weights for last 16 tokens only (for compatibility)
-        Q_last = Q_last[:, :, -16:] if Q_last.size(-2) >= 16 else Q_last  # (B, N, 16, D) or less
-        s_last = torch.matmul(Q_last, K_all.transpose(-2, -1))  # (B, N, 16, M*H)
-        m_last = m_last[:, :, -16:] if m_last.size(-2) >= 16 else m_last  # (B, 1, 16, M*H)
+        # Compute attention weights for last num_last_queries tokens only (for compatibility)
+        Q_last = Q_last[:, :, -num_last_queries:] if Q_last.size(-2) >= num_last_queries else Q_last  # (B, N, num_last_queries, D) or less
+        s_last = torch.matmul(Q_last, K_all.transpose(-2, -1))  # (B, N, num_last_queries, M*H)
+        m_last = m_last[:, :, -num_last_queries:] if m_last.size(-2) >= num_last_queries else m_last  # (B, 1, num_last_queries, M*H)
         s_last = s_last + m_last
 
     # Reshape output to expected format
