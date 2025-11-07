@@ -14,10 +14,10 @@
 
 ## Key Features
 
-- 🚀 **Linear Complexity**: O(n) attention instead of O(n²) through block-sparse patterns
-- ⚡ **Fast Inference**: Allows skipping autoregressive decoding using attention scores directly
-- 🎯 **Strong Performance**: Matches or outperforms state-of-the-art listwise rankers
-- 🔧 **Easy Integration**: Existing LLMs (Qwen, Llama, etc) can be easily made a BlockRank model
+- **Linear Complexity**: O(n) attention instead of O(n²) through block-sparse patterns
+- **Fast Inference**: Allows skipping autoregressive decoding using attention scores directly
+- **Strong Performance**: Matches or outperforms state-of-the-art listwise rankers
+- **Easy Integration**: Existing LLMs (Qwen, Mistral, Llama, etc) can be easily made a BlockRank model
 
 ## Installation
 
