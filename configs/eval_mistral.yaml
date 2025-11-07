@@ -7,11 +7,12 @@ model:
 
 # Evaluation configuration
 eval:
-  data_path: "data/icr-beir-evals/test/dbpedia_entity.jsonl"
-  qrels_path: "data/icr-beir-evals/qrels/dbpedia_entity.tsv"
+  data_path: "data/icr-beir-evals/contriever-top100-icr/trec_covid.jsonl"
+  qrels_path: "data/icr-beir-evals/qrels/trec_covid.tsv"
   num_documents: -1 # Evaluate on all documents
-  output_dir: "outputs/eval_beir_dbpedia_entity"
+  output_dir: "outputs/eval_beir_trec_covid"
   seed: 42
   per_device_eval_batch_size: 1
   train_test_split: 1.0
-  max_block_length: 512
+  max_block_length: 384
+  aux_layer_idx: 20         # Layer to extract attention scores (l* in paper)

@@ -15,6 +15,7 @@ from train import setup_model_and_tokenizer, load_config, ModelArgs, DataArgs, T
 from transformers import HfArgumentParser, set_seed
 from blockrank.dataset import load_icr_dataset_hf, icr_collate_fn, block_icr_collate_fn
 from blockrank.utils import calculate_accuracy, load_qrels
+from blockrank.losses import compute_auxiliary_attention_loss
 from accelerate import Accelerator, DataLoaderConfiguration
 import wandb
 
@@ -23,7 +24,6 @@ def main():
     ap = argparse.ArgumentParser(add_help=False)
     ap.add_argument("--config", type=str, required=True)
     ap.add_argument("--checkpoint", type=str, default=None)
-    ap.add_argument("--attn_layer", type=int, default=20, help="Which attention layer to use for predictions")
     cfg_args, remaining = ap.parse_known_args()
     cfg = load_config(cfg_args.config)
 
@@ -55,7 +55,7 @@ def main():
                 "data": dargs.__dict__,
                 "eval": targs.__dict__,
                 "checkpoint": cfg_args.checkpoint,
-                "attn_layer": cfg_args.attn_layer,
+                "attn_layer": targs.aux_layer_idx,
             },
             job_type="attn_eval",
         )
@@ -97,11 +97,11 @@ def main():
     # Prepare model and dataloader with Accelerator
     model, dataloader = accelerator.prepare(model, dataloader)
     logger.info(f"Running attention-based evaluation on {accelerator.num_processes} processes...")
-    logger.info(f"Using attention layer {cfg_args.attn_layer} for predictions")
+    logger.info(f"Using attention layer {targs.aux_layer_idx} for predictions")
 
     # Optimize by preventing computation in layers after the target layer
     unwrapped_model = accelerator.unwrap_model(model)
-    target_layer_idx = cfg_args.attn_layer
+    target_layer_idx = targs.aux_layer_idx
 
     # Find the model's layer list
     if hasattr(unwrapped_model, 'model') and hasattr(unwrapped_model.model, 'layers'):
@@ -118,26 +118,33 @@ def main():
         def forward(self, hidden_states, **kwargs):
             return hidden_states
 
-    original_layers = []
+    original_forwards = []
     if layers is not None and target_layer_idx + 1 < len(layers):
+        def identity_forward(self, hidden_states, *args, **kwargs):
+            return hidden_states
+        
         for i in range(target_layer_idx + 1, len(layers)):
-            original_layers.append((i, layers[i]))
-            layers[i] = PassThroughLayer()
-        logger.info(f"Disabled {len(original_layers)} layers after layer {target_layer_idx} to save computation")
+            original_forwards.append((i, layers[i].forward))
+            layers[i].forward = identity_forward.__get__(layers[i], type(layers[i]))
+        unwrapped_model.lm_head.forward = identity_forward.__get__(unwrapped_model.lm_head, type(unwrapped_model.lm_head))
+        logger.info(f"Monkey-patched {len(original_forwards)} layers & LM head after layer {target_layer_idx} with identity forward")
 
     all_attn_preds = []
     with torch.no_grad():
         pbar = tqdm(dataloader, disable=not accelerator.is_local_main_process, desc="Evaluating")
         for batch in pbar:
             # Forward pass with attention output
-            out = unwrapped_model(**batch, output_attentions=True, layers_to_return_scores=[cfg_args.attn_layer])
+            labels = batch.pop('labels')  # Remove labels from batch
+            answer_ids = batch.pop('answer_ids', None)  # Remove answer_ids if present
+            out = unwrapped_model(**batch, output_attentions=True, layers_to_return_scores=[target_layer_idx])
 
-            # Extract attention predictions from specified layer
-            B, M, H = batch['attention_mask'].shape
-            _, N, H1, MH = out.attentions[0].shape
-            attn = F.softmax(out.attentions[0][:, :, -1, H:-H], dim=-1)
-            attn = attn.reshape(B, N, -1, H) # (B, N, num_docs, H)
-            attn_scores = attn.mean(1).sum(-1) # (B, num_docs)
+            attn_scores = compute_auxiliary_attention_loss(
+                attention_scores=out.attentions[0],
+                labels=labels,
+                attention_mask=batch['attention_mask'],
+                answer_ids=None,
+                return_logits=True,
+            )  # (B, num_docs)
 
             # Get top-k predictions (k=10 for ranking metrics)
             k = min(10, attn_scores.shape[-1])  # Handle cases where num_docs < 10
@@ -164,12 +171,6 @@ def main():
 
         accelerator.wait_for_everyone()
 
-    # Restore original layers
-    if original_layers:
-        for i, original_layer in original_layers:
-            layers[i] = original_layer
-        logger.info(f"Restored {len(original_layers)} original layers")
-
     # Only main process computes metrics and saves
     if accelerator.is_local_main_process:
         results = calculate_accuracy(all_attn_preds, eval_ds, qrels=qrels)
@@ -182,13 +183,13 @@ def main():
         metrics_file = os.path.join(targs.output_dir, "attn_eval_metrics.json")
         results_with_config = {
             **results,
-            "attn_layer": cfg_args.attn_layer,
+            "attn_layer": targs.aux_layer_idx,
         }
         with open(metrics_file, "w") as f:
             json.dump(results_with_config, f, indent=2)
 
         logger.info(f"\n{'='*50}\nAttention-based Evaluation Results:")
-        logger.info(f"  Attention Layer: {cfg_args.attn_layer}")
+        logger.info(f"  Attention Layer: {targs.aux_layer_idx}")
         for k, v in results.items():
             logger.info(f"  {k}: {v:.4f}" if isinstance(v, float) else f"  {k}: {v}")
         logger.info(f"{'='*50}\n")
