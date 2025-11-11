@@ -115,8 +115,15 @@ score_i = Σ attention[layer, head, query_token, doc_i_tokens]
 
 | Model | Base | Training Data | Download |
 |-------|------|---------------|----------|
-| **blockrank-msmarco-mistral-7B** | Mistral-7B-Instruct-v0.3 | 10% MS MARCO (50K) | [🤗 HuggingFace](https://huggingface.co/quicktensor/blockrank-msmarco-mistral-7b) |
+| **blockrank-msmarco-mistral-7B** | Mistral-7B-Instruct-v0.3 | [10% MS MARCO (50K)](https://huggingface.co/quicktensor/blockrank-msmarco-train-10p) | [🤗 HuggingFace](https://huggingface.co/quicktensor/blockrank-msmarco-mistral-7b) |
 | *More models coming soon...* | | | |
+
+## Evals
+[Evaluation Data](https://huggingface.co/quicktensor/icr-beir-evals)
+| Model |  Avg. BEIR | Climate FEVER | DBPedia | FEVER | FiQA | Hotpot QA | MS MARCO | NF Corpus | NQ | Sci-Docs | Sci-Fact | TREC-COVID |
+|-------|---------------|---------|-------|------|----------|----------|----------|----|----------|----------|------------|----------|
+BlockRank-Mistral-7B |  54.9 | 29.0 | 51.0 | 87.8 | 44.4 | 75.2 | 47.6 | 36.4 | 62.6 | 18.5 | 75.2 | 75.9 |
+
 
 ## Documentation
 
