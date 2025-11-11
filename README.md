@@ -122,7 +122,7 @@ score_i = Σ attention[layer, head, query_token, doc_i_tokens]
 [Evaluation Data](https://huggingface.co/quicktensor/icr-beir-evals)
 | Model |  Avg. BEIR | Climate FEVER | DBPedia | FEVER | FiQA | Hotpot QA | MS MARCO | NF Corpus | NQ | Sci-Docs | Sci-Fact | TREC-COVID |
 |-------|---------------|---------|-------|------|----------|----------|----------|----|----------|----------|------------|----------|
-BlockRank-Mistral-7B |  54.9 | 29.0 | 51.0 | 87.8 | 44.4 | 75.2 | 47.6 | 36.4 | 62.6 | 18.5 | 75.2 | 75.9 |
+[blockrank-msmarco-mistral-7B](https://huggingface.co/quicktensor/blockrank-msmarco-mistral-7b) |  54.9 | 29.0 | 51.0 | 87.8 | 44.4 | 75.2 | 47.6 | 36.4 | 62.6 | 18.5 | 75.2 | 75.9 |
 
 
 ## Documentation
