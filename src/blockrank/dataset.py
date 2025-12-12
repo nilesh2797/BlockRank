@@ -4,7 +4,6 @@ from torch.utils.data import Dataset
 from .utils import (
     remap_documents,
     create_prompt_completion_format,
-    create_conversation_format,
 )
 
 import torch
@@ -24,6 +23,7 @@ def load_icr_dataset_hf(
     streaming: bool = False,
     eval_mode: bool = False,
     use_blockrank: bool = False,
+    prompt_type: str | None = None,
     **kwargs,
 ) -> DatasetDict:
     """
@@ -62,6 +62,8 @@ def load_icr_dataset_hf(
             ds_dict = raw.train_test_split(test_size=1 - train_test_split, seed=seed or 42)
 
     PROMPT_SEGMENT_SEP = "<<end_of_block_prompt_segment>>" if use_blockrank else "\n"
+    PROMPT_TYPE = prompt_type or ("mistral" if "mistral" in tokenizer.name_or_path.lower() else "qwen")
+    print(f"[load_icr_dataset_hf] Using PROMPT_TYPE={PROMPT_TYPE}")
 
     def _sample_and_format(example, idx):
         query = example["query"]
@@ -110,7 +112,10 @@ def load_icr_dataset_hf(
     def _block_tokenize_batch(batch):
         all_block_input_texts = []
         for itr in range(len(batch['prompt'])):
-            input_texts = tokenizer.apply_chat_template(batch['prompt'][itr]+batch['completion'][itr], tokenize=False, continue_final_message=eval_mode)
+            input_texts = tokenizer.apply_chat_template(batch['prompt'][itr]+batch['completion'][itr], tokenize=False)
+            input_texts = input_texts.strip()
+            if eval_mode and input_texts.endswith(tokenizer.eos_token):
+                input_texts = input_texts[:-len(tokenizer.eos_token)].rstrip()
             block_input_texts = input_texts.split(PROMPT_SEGMENT_SEP)
             n = len(block_input_texts)
             block_input_texts = [f'\n{x}' if i > 0 and i < n-1 else x for i, x in enumerate(block_input_texts)]

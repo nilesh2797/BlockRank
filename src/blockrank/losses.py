@@ -14,8 +14,9 @@ def compute_auxiliary_attention_loss(
     labels: torch.Tensor,
     attention_mask: torch.Tensor,
     answer_ids: torch.Tensor | None = None,
-    temperature: float = 0.05,
+    temperature: float = 0.03,
     return_logits = False,
+    query_token_offset: int = 0,
 ) -> torch.Tensor:
     """
     Compute InfoNCE contrastive loss on attention scores at first loss position (should correspond to "[" token).
@@ -30,6 +31,8 @@ def compute_auxiliary_attention_loss(
         attention_mask: (B, M, H) - block-wise attention mask
         answer_ids: (B, max_num_answers) - positive document indices, padded with -1, or None return only logits
         temperature: float - temperature for InfoNCE loss (default: 0.1)
+        return_logits: bool - whether to return logits along with loss
+        query_token_offset: int - offset to add to bracket token index (if bracket is not at first position in last h1)
 
     Returns:
         loss: scalar tensor - InfoNCE contrastive loss
@@ -43,20 +46,29 @@ def compute_auxiliary_attention_loss(
     last_h1_labels = labels[:, -h1:]  # (B, h1)
     # Find first position where labels > -100 (first non-masked token = bracket)
     bracket_mask = last_h1_labels > -100  # (B, h1)
-    bracket_indices = bracket_mask.int().argmax(dim=-1)[:, None]  # (B,) - index in [0, h1)
-    bracket_indices = torch.hstack([bracket_indices-1, bracket_indices])  # (B, 2) - take bracket and previous token
-    assert torch.all(bracket_indices >= 0), "Bracket token not found in last h1 positions."
+    bracket_indices = bracket_mask.int().argmax(dim=-1)[:, None] + query_token_offset  # (B,) - index in [0, h1)
+    # bracket_indices = torch.hstack([bracket_indices-1, bracket_indices])  # (B, 2) - take bracket and previous token
+    if not torch.all(bracket_indices >= 0):
+        print("WARNING: Bracket token not found in last h1 positions.")
 
     # Step 2: Extract attention scores at bracket position for document blocks only
     # attention_scores shape: (B, N, h1, M*H)
     # We need to index each batch item with its specific bracket position
     bracket_attn_logits = attention_scores.take_along_dim(bracket_indices[:, None, :, None], dim=2) # (B, N, 2, M*H)
 
-    # Extract only document tokens (skip first block H and last block H)
-    bracket_attn_logits = bracket_attn_logits[..., H:-H]  # (B, N, 2, (M-2)*H)
+    # # Extract only document tokens (skip first block H and last block H)
+    # bracket_attn_logits = bracket_attn_logits[..., H:-H]  # (B, N, 2, (M-2)*H)
 
     # Step 2: Apply softmax over all document tokens
-    bracket_attn = F.softmax(bracket_attn_logits, dim=-1)  # (B, N, 2, (M-2)*H)
+    # bracket_attn = F.softmax(bracket_attn_logits, dim=-1)  # (B, N, 2, (M-2)*H)
+    with torch.no_grad():
+        non_doc_attn_lse = torch.logaddexp(
+            torch.logsumexp(bracket_attn_logits[..., :H], dim=-1, keepdim=True),
+            torch.logsumexp(bracket_attn_logits[..., -H:], dim=-1, keepdim=True),
+        ) # L, B, N, H1, 1, 1
+    doc_attn_lse = torch.logsumexp(bracket_attn_logits[..., H:-H], dim=-1, keepdim=True) # L, B, N, H1, 1, 1
+    attn_lse = torch.logaddexp(non_doc_attn_lse.detach(), doc_attn_lse) # L, B, N, H1, 1, 1
+    bracket_attn = (bracket_attn_logits[..., H:-H] - attn_lse).exp()
 
     # Step 3: Reshape to separate documents
     # Documents are in blocks 1 to M-2 (block 0 is instruction, block M-1 is query)
@@ -65,7 +77,7 @@ def compute_auxiliary_attention_loss(
 
     # Step 4: Aggregate to document-level scores
     # Average over attention heads, signal query tokens, sum over tokens within each document
-    doc_scores = bracket_attn.mean(dim=(1, 2)).sum(dim=-1)  # (B, num_docs)
+    doc_scores = bracket_attn.sum(dim=-1).mean(dim=(1,2))  # (B, num_docs)
 
     # Step 5: Compute InfoNCE loss with multiple positives
     # answer_ids shape: (B, max_num_answers), values are doc indices or -1 (padding)

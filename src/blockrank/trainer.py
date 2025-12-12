@@ -80,6 +80,7 @@ class BlockRankAuxLossTrainer(SFTTrainer):
                 **model_inputs,
                 output_attentions=True,
                 layers_to_return_scores=[aux_layer_idx],
+                num_last_queries=32,
             )
 
             assert outputs.attentions is not None, "Model did not return attention scores."

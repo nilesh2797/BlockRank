@@ -52,8 +52,8 @@ class ModelArgs:
     model_name_or_path: str = ""
     use_4bit: bool = False
     use_lora: bool = False
-    lora_r: int = -1
-    lora_alpha: int = -1
+    lora_r: int = 32
+    lora_alpha: int = 64
     lora_dropout: float = 0.0
     lora_target_modules: Optional[str] = "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"
     trust_remote_code: bool = False
@@ -91,6 +91,7 @@ class TrainArgs(SFTConfig):
     fp16: bool = False
     bf16: bool = True
     gradient_checkpointing: bool = True
+    use_liger_kernel: bool = False
     seed: int = 42
     report_to: Optional[str] = "wandb"
     run_name: Optional[str] = None
@@ -124,8 +125,8 @@ def setup_model_and_tokenizer(m: ModelArgs, device_map: str = "auto"):
     logger.info(f"Loading tokenizer and model from {m.model_name_or_path}")
     tok = AutoTokenizer.from_pretrained(m.model_name_or_path, use_fast=True, trust_remote_code=m.trust_remote_code)
     if tok.pad_token is None:
-        tok.pad_token = tok.unk_token
-        tok.pad_token_id = tok.unk_token_id
+        tok.pad_token = tok.eos_token
+        tok.pad_token_id = tok.eos_token_id
     tok.padding_side = "left"
 
     q_cfg = BitsAndBytesConfig(

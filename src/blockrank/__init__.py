@@ -23,7 +23,7 @@ from .dataset import (
 )
 
 from .utils import (
-    format_ranking_prompt,
+    create_prompt_completion_format,
     remap_documents,
     calculate_accuracy,
     load_qrels,

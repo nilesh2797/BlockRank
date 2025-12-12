@@ -82,7 +82,7 @@ def remap_documents(
 
     return remapped_docs, remapped_ids, remapped_answer_ids
 
-def format_ranking_prompt(
+def format_ranking_prompt_mistral(
     query: str,
     documents: List[str],
     sep: str,
@@ -123,15 +123,48 @@ def format_ranking_prompt(
     prompt = sep.join(prompt_parts)
     return prompt
 
-def create_conversation_format(
+def format_ranking_prompt_qwen(
+    query: str,
+    documents: List[str],
+    sep: str,
+) -> str:
+    # Build the prompt
+    instruction = "You will be given a query and a list of documents. Each document will be formatted as <Document>: ID: <id> | CONTENT: <content> | END ID: <id>. You need to read and understand carefully the content of each document and your goal is to give the IDs of the document from the list that can help answer the query."
+    prompt_parts = [f"<Instruct>: {instruction}\n<Query>: {query}\n"]
+    format_doc = lambda id, text: f"<Document>: ID: {id} | CONTENT: {text} | END ID: {id}"
+
+    # Add documents in order
+    doc_ids = range(len(documents))
+    for doc_id in doc_ids:
+        formatted_doc = format_doc(doc_id, documents[doc_id].strip())
+        prompt_parts.append(formatted_doc)
+
+    prompt_parts.append("")
+    prompt = sep.join(prompt_parts)
+    return prompt
+
+
+def create_conversation_format_mistral(
     query: str,
     documents: Dict[str, str],
     answer_ids: List[str],
     sep="\n",
 ) -> List[Dict[str, str]]:
     return [
-        {"role": "user", "content": format_ranking_prompt(query, documents, sep)},
+        {"role": "user", "content": format_ranking_prompt_mistral(query, documents, sep)},
         {"role": "assistant", "content": f"Final Answer: {sep}[" + (', '.join([str(x) for x in answer_ids]) + f"]" if answer_ids else "")}
+    ]
+
+def create_conversation_format_qwen(
+    query: str,
+    documents: Dict[str, str],
+    answer_ids: List[str],
+    sep="\n",
+) -> List[Dict[str, str]]:
+    return [
+        {"role": "system", "content": "Judge whether the Document meets the requirements based on the Query and the Instruct provided."},
+        {"role": "user", "content": format_ranking_prompt_qwen(query, documents, sep)},
+        {"role": "assistant", "content": f"<think>I need to give the IDs of the most relevant documents in the list for the query: {query} formatted as list [...].</think>\n<Answer>: {sep}[" + (', '.join([str(x) for x in answer_ids]) + f"]" if answer_ids else "")}
     ]
 
 def create_prompt_completion_format(
@@ -139,9 +172,16 @@ def create_prompt_completion_format(
     documents: Dict[str, str],
     answer_ids: List[str],
     sep="\n",
+    type: str = "mistral", # mistral or qwen
 ) -> Dict[str, str]:
-    m = create_conversation_format(query, documents, answer_ids, sep)
-    return {"prompt": [m[0]], "completion": [m[1]]}
+    if type == "mistral":
+        m = create_conversation_format_mistral(query, documents, answer_ids, sep)
+        return {"prompt": m[:1], "completion": m[1:]}
+    elif type == "qwen":
+        m = create_conversation_format_qwen(query, documents, answer_ids, sep)
+        return {"prompt": m[:2], "completion": m[2:]}
+    else:
+        raise ValueError(f"Unknown type: {type}")
 
 def load_jsonl(file_path: str) -> List[Dict]:
     """
@@ -274,15 +314,22 @@ def calculate_accuracy(
 
     Args:
         predictions: List of predicted document indices (can be single int or list of ints for top-k)
-        eval_ds: Evaluation dataset containing answer_ids, query_id, and remapped_doc_ids
+        eval_ds: Evaluation dataset containing answer_ids, query_id, and remapped_doc_ids.
+                 Can be a HuggingFace Dataset or a dict-like object with list values.
         qrels: Optional qrels dictionary mapping query_id -> {doc_id: relevance}
         verbose: Print detailed predictions
 
     Returns:
         Dictionary with metrics including accuracy, nDCG@k, and MRR@k
     """
-    # Extract ground truth from eval_ds
-    ground_truth = list(eval_ds['answer_ids'])[:len(predictions)]
+    # Extract ground truth from eval_ds - handle both HF datasets and dict/list-like objects
+    n = len(predictions)
+    if isinstance(eval_ds['answer_ids'], list):
+        # Already a list, just slice it
+        ground_truth = eval_ds['answer_ids'][:n]
+    else:
+        # HF dataset or other, convert to list and slice
+        ground_truth = list(eval_ds['answer_ids'])[:n]
 
     # Normalize predictions and ground_truth
     # For predictions: if it's a list of ints (top-k), keep it; if single value, wrap it
@@ -327,9 +374,17 @@ def calculate_accuracy(
         # Build run dictionary for pytrec_eval: query_id -> {doc_id: score}
         run = {}
 
+        # Pre-extract query_ids and remapped_doc_ids if needed for efficiency
+        if isinstance(eval_ds['query_id'], list):
+            query_ids = eval_ds['query_id'][:n]
+            remapped_doc_ids_list = eval_ds['remapped_doc_ids'][:n]
+        else:
+            query_ids = [eval_ds['query_id'][i] for i in range(n)]
+            remapped_doc_ids_list = [eval_ds['remapped_doc_ids'][i] for i in range(n)]
+
         for i in range(len(normalized_preds)):
-            query_id = str(eval_ds['query_id'][i])
-            remapped_doc_ids = eval_ds['remapped_doc_ids'][i]
+            query_id = str(query_ids[i])
+            remapped_doc_ids = remapped_doc_ids_list[i]
 
             # Skip if query not in qrels
             if query_id not in qrels:
