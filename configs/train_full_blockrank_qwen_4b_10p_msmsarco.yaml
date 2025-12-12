@@ -9,7 +9,7 @@ model:
   attn_implementation: "default_blockrank" 
 
 data:
-  data_path: "data/msmarco/train_10p/parsed_hard_ids_10p_train.jsonl"  # Full dataset
+  data_path: "quicktensor/blockrank-msmarco-train-10p  # Full dataset
   streaming: false
   val_data_path: null  # Separate validation
   num_documents: 30
