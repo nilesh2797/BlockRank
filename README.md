@@ -19,6 +19,11 @@
 - **Strong Performance**: Matches or outperforms state-of-the-art listwise rankers
 - **Easy Integration**: Existing LLMs (Qwen, Mistral, Llama, etc) can be easily made a BlockRank model
 
+## Results
+| Model | Train Data | Climate FEVER | DBPedia | FEVER | FiQA | Hotpot QA | MS MARCO | NF Corpus | NQ | Sci-Docs | Sci-Fact | TREC-COVID | Avg BEIR |
+|-------|------------|---------------|---------|-------|------|----------|----------|----------|----|----------|----------|------------|----------|
+BlockRank-Mistral-7B | 10% MS MARCO (50K) | 29.0 | 51.0 | 87.8 | 44.4 | 75.2 | 47.6 | 36.4 | 62.6 | 18.5 | 75.2 | 75.9 | 54.9 |
+
 ## Installation
 
 ```bash
@@ -68,7 +73,7 @@ from blockrank.trainer import BlockRankAuxLossTrainer
 # Configure training (see src/configs/ for examples)
 
 # Single GPU
-python scripts/train.py --config your_config.yaml
+CUDA_VISIBLE_DEVICES=0 python scripts/train.py --config your_config.yaml
 
 # Multi-GPU
 accelerate launch --config_file src/configs/accelerate_config.yaml \
